@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 import os
-import pickle
+import sqlite3
 
 class FaceRecognitionService:
 
@@ -22,22 +22,20 @@ class FaceRecognitionService:
             ""
         )
 
-        # POC storage backed by local file
-        self.db_file = "embeddings_db.pkl"
-        self.embeddings = self._load_db()
+        # Initialize SQLite database
+        self.db_file = "face_database.db"
+        self._init_db()
 
-    def _load_db(self):
-        if os.path.exists(self.db_file):
-            try:
-                with open(self.db_file, "rb") as f:
-                    return pickle.load(f)
-            except Exception:
-                pass
-        return {}
-
-    def _save_db(self):
-        with open(self.db_file, "wb") as f:
-            pickle.dump(self.embeddings, f)
+    def _init_db(self):
+        with sqlite3.connect(self.db_file) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS faces (
+                    employee_id TEXT PRIMARY KEY,
+                    embedding BLOB NOT NULL
+                )
+            ''')
+            conn.commit()
 
     def get_embedding(self, image_bytes: bytes):
         image_array = np.frombuffer(image_bytes, dtype=np.uint8)
@@ -76,8 +74,14 @@ class FaceRecognitionService:
     ):
         embedding = self.get_embedding(image_bytes)
 
-        self.embeddings[employee_id] = embedding
-        self._save_db()
+        # Store embedding in SQLite (store as bytes)
+        with sqlite3.connect(self.db_file) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT OR REPLACE INTO faces (employee_id, embedding)
+                VALUES (?, ?)
+            ''', (employee_id, embedding.tobytes()))
+            conn.commit()
 
         # Save image to db/folder
         os.makedirs("employees", exist_ok=True)
@@ -96,7 +100,13 @@ class FaceRecognitionService:
     ):
         embedding = self.get_embedding(image_bytes)
 
-        if not self.embeddings:
+        # Retrieve all faces from SQLite
+        with sqlite3.connect(self.db_file) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT employee_id, embedding FROM faces")
+            rows = cursor.fetchall()
+
+        if not rows:
             return {
                 "matched": False,
                 "message": "No employees registered"
@@ -105,9 +115,11 @@ class FaceRecognitionService:
         best_employee = None
         best_score = -1
 
-        for employee_id, stored_embedding in self.embeddings.items():
+        for employee_id, stored_embedding_bytes in rows:
+            # Reconstruct the numpy array from bytes
+            stored_embedding = np.frombuffer(stored_embedding_bytes, dtype=np.float32).reshape(1, 128)
+            
             # OpenCV SFace match score (Cosine similarity)
-            # 0 means Cosine distance type
             score = self.recognizer.match(
                 embedding, stored_embedding, 0
             )
