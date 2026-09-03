@@ -71,25 +71,39 @@ with col2:
                     img_bytes = camera_image.getvalue()
                     result = face_service.recognize(img_bytes)
                     
-                    if not result["matched"]:
-                        st.warning("⚠️ Face not recognized!")
-                        st.caption(f"Best match confidence: {result.get('confidence', 'N/A')}")
+                    if result.get("status") == "EMPTY":
+                        st.error(result["message"])
                     else:
                         employee_id = result["employee_id"]
-                        today = datetime.now().date().isoformat()
-                        key = f"{employee_id}:{today}"
+                        confidence = result["confidence"]
                         
-                        if key in st.session_state.attendance:
-                            st.info(f"Attendance already marked for today at {st.session_state.attendance[key]}")
-                            st.success(f"✅ Recognized: **{employee_id}**")
-                            st.caption(f"Confidence Score: {result.get('confidence', 'N/A')}")
-                        else:
-                            current_time = datetime.now().isoformat()
-                            st.session_state.attendance[key] = current_time
+                        # 3-STATE LOGIC
+                        if confidence >= 0.38:
+                            # 1. MATCH - High Confidence
+                            today = datetime.now().date().isoformat()
+                            key = f"{employee_id}:{today}"
                             
-                            st.success(f"✅ Recognized & Attendance Marked: **{employee_id}**")
-                            st.info("Message: Attendance successfully recorded.")
-                            st.caption(f"Confidence Score: {result.get('confidence', 'N/A')}")
+                            if key in st.session_state.attendance:
+                                st.info(f"Attendance already marked for today at {st.session_state.attendance[key]}")
+                                st.success(f"✅ Recognized: **{employee_id}**")
+                                st.caption(f"Confidence Score: {confidence}")
+                            else:
+                                current_time = datetime.now().isoformat()
+                                st.session_state.attendance[key] = current_time
+                                
+                                st.success(f"✅ Recognized & Attendance Marked: **{employee_id}**")
+                                st.info("Message: Attendance successfully recorded.")
+                                st.caption(f"Confidence Score: {confidence}")
+                                
+                        elif 0.28 <= confidence < 0.38:
+                            # 2. RETRY - Borderline Confidence
+                            st.warning(f"⚠️ Borderline Match (Score: {confidence}). Please try again.")
+                            st.markdown("- Move into better lighting\n- Look straight at the camera\n- Ensure your face is clearly visible")
+                            
+                        else:
+                            # 3. REJECT - Low Confidence
+                            st.error(f"❌ Unknown Face Rejected. (Highest Score: {confidence})")
+                            
                 except ValueError as ve:
                     st.error(f"Validation Error: {ve}")
                 except Exception as e:

@@ -37,6 +37,26 @@ class FaceRecognitionService:
             ''')
             conn.commit()
 
+    def _validate_face_quality(self, image, face):
+        # face contains 15 elements: x, y, w, h, ...
+        x, y, w, h = face[0:4]
+        
+        # 1. Size Validation
+        if w < 60 or h < 60:
+            raise ValueError(f"Face is too small ({int(w)}x{int(h)}). Please move closer to the camera.")
+        
+        # 2. Blur Validation
+        # Crop the face region to analyze blur
+        x, y = max(0, int(x)), max(0, int(y))
+        w, h = int(w), int(h)
+        face_roi = image[y:y+h, x:x+w]
+        
+        if face_roi.size > 0:
+            gray = cv2.cvtColor(face_roi, cv2.COLOR_BGR2GRAY)
+            variance = cv2.Laplacian(gray, cv2.CV_64F).var()
+            if variance < 80.0:  # Adjustable threshold
+                raise ValueError(f"Image is too blurry (Quality score: {variance:.1f}). Please hold still and ensure good lighting.")
+
     def get_embedding(self, image_bytes: bytes):
         image_array = np.frombuffer(image_bytes, dtype=np.uint8)
         image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
@@ -52,12 +72,15 @@ class FaceRecognitionService:
         _, faces = self.detector.detect(image)
 
         if faces is None or len(faces) == 0:
-            raise ValueError("No face detected")
+            raise ValueError("No face detected in the image.")
 
         if len(faces) > 1:
-            raise ValueError("Multiple faces detected. Please provide one face.")
+            raise ValueError("Multiple faces detected. Please ensure only one person is in the frame.")
 
         face = faces[0]
+
+        # Quality Gate
+        self._validate_face_quality(image, face)
 
         # Align face based on landmarks
         aligned_face = self.recognizer.alignCrop(image, face)
@@ -95,8 +118,7 @@ class FaceRecognitionService:
 
     def recognize(
         self,
-        image_bytes: bytes,
-        threshold: float = 0.36
+        image_bytes: bytes
     ):
         embedding = self.get_embedding(image_bytes)
 
@@ -108,8 +130,8 @@ class FaceRecognitionService:
 
         if not rows:
             return {
-                "matched": False,
-                "message": "No employees registered"
+                "status": "EMPTY",
+                "message": "No employees registered in the system."
             }
 
         best_employee = None
@@ -124,20 +146,12 @@ class FaceRecognitionService:
                 embedding, stored_embedding, 0
             )
             
-            # For Cosine in OpenCV SFace, >= 0.363 is generally considered a match
             if score > best_score:
                 best_score = float(score)
                 best_employee = employee_id
 
-        if best_score >= threshold:
-            return {
-                "matched": True,
-                "employee_id": best_employee,
-                "confidence": round(best_score, 4)
-            }
-
         return {
-            "matched": False,
-            "employee_id": None,
+            "status": "SUCCESS",
+            "employee_id": best_employee,
             "confidence": round(best_score, 4)
         }
