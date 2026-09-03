@@ -26,20 +26,33 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.header("1. Register Employee")
-    st.markdown("Upload a clear face photo to register a new employee in the system.")
+    st.markdown("Register a new face in the database using your webcam or by uploading a photo.")
     
-    emp_id = st.text_input("Employee ID (e.g., EMP001)")
-    uploaded_file = st.file_uploader("Upload Profile Picture", type=['jpg', 'jpeg', 'png'])
+    emp_id = st.text_input("Employee ID (e.g., EMP001)", key="reg_id")
     
-    if st.button("Register Face", type="primary"):
-        if not emp_id or not uploaded_file:
-            st.error("Please provide both an Employee ID and an image.")
+    tab1, tab2 = st.tabs(["📸 Use Webcam", "📁 Upload Photo"])
+    
+    img_bytes = None
+    with tab1:
+        reg_camera = st.camera_input("Take a clear picture of your face", key="reg_cam")
+        if reg_camera:
+            img_bytes = reg_camera.getvalue()
+            
+    with tab2:
+        reg_upload = st.file_uploader("Upload a face photo", type=['jpg', 'jpeg', 'png'])
+        if reg_upload:
+            img_bytes = reg_upload.getvalue()
+    
+    if st.button("Register Face", type="primary", use_container_width=True):
+        if not emp_id:
+            st.error("Please enter an Employee ID.")
+        elif not img_bytes:
+            st.error("Please provide an image (either take a photo or upload one).")
         else:
             with st.spinner('Registering face...'):
                 try:
-                    img_bytes = uploaded_file.getvalue()
                     result = face_service.register_employee(emp_id, img_bytes)
-                    st.success(f"Successfully registered Employee: {result['employee_id']}")
+                    st.success(f"✅ Successfully registered Employee: **{result['employee_id']}**")
                 except ValueError as ve:
                     st.error(f"Validation Error: {ve}")
                 except Exception as e:
