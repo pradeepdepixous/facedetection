@@ -34,6 +34,13 @@ with col1:
     
     img_bytes = None
     with tab1:
+        st.info("""
+        **📸 Camera Rules:**
+        1. Ensure your face is well-lit (no strong backlight).
+        2. Look straight into the camera.
+        3. Keep your face centered in the frame.
+        4. Remove masks or dark sunglasses.
+        """)
         reg_camera = st.camera_input("Take a clear picture of your face", key="reg_cam")
         if reg_camera:
             img_bytes = reg_camera.getvalue()
@@ -61,6 +68,14 @@ with col1:
 with col2:
     st.header("2. Live Attendance")
     st.markdown("Look at your webcam and take a picture to mark today's attendance.")
+    
+    st.info("""
+    **📸 Camera Rules:**
+    1. Ensure your face is well-lit (no strong backlight).
+    2. Look straight into the camera.
+    3. Keep your face centered in the frame.
+    4. Remove masks or dark sunglasses.
+    """)
     
     camera_image = st.camera_input("Take a picture")
     
