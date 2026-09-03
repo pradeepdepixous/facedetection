@@ -1,6 +1,5 @@
 facevenv/
 __pycache__/
-*.onnx
 *.pkl
 *.db
 employees/
